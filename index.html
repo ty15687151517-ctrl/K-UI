@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -24,6 +24,7 @@
         ::-webkit-scrollbar-thumb:hover { background: rgba(107, 114, 128, 0.8); }
         input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4); }
 
+        /* ================= 探针前台大盘核心样式 ================= */
         .probe-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: transparent; color: #333; margin: 0; padding: 20px; transition: all 0.3s; min-height: 100vh;}
         body:not(.theme6) .probe-body { background-color: #f4f5f7; }
         
@@ -54,11 +55,13 @@
         .probe-stat-bar-full > div { height: 100%; border-radius: 3px; transition: width 0.3s; }
         .probe-stat-subtext { font-size: 11px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+        /* Table View */
         .probe-custom-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .probe-custom-table th { background: #f8fafc; padding: 14px 16px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
         .probe-custom-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
         .probe-custom-table tr:hover { background: #f8fafc; cursor: pointer;}
         
+        /* Toggle & Filter */
         .probe-view-controls { display: flex; gap: 8px; background: rgba(0,0,0,0.05); padding: 4px; border-radius: 8px; }
         .probe-toggle-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border: none; background: transparent; cursor: pointer; border-radius: 6px; font-size: 13px; font-weight: 600; color: #64748b; transition: all 0.2s; }
         .probe-toggle-btn.active { background: white; color: #3b82f6; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -66,9 +69,11 @@
         .probe-filter-tag { display: inline-flex; align-items: center; gap: 5px; background: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor:pointer; border: 1px solid transparent;}
         .probe-filter-tag.active { background: #3b82f6; color: white; }
 
+        /* Map */
         #probe-map-container { width: 100%; height: 500px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; border: 1px solid #e5e7eb; background-color: #b1c2d4; background-image: linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px); background-size: 20px 20px; z-index: 1;}
         .probe-custom-map-badge div { background-color: #10b981; color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
 
+        /* Detail View */
         .probe-header-card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .probe-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; font-size: 14px; }
         .probe-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
@@ -77,6 +82,7 @@
         .probe-chart-full { grid-column: 1 / -1; }
         .probe-chart-full canvas { max-height: 250px !important; }
 
+        /* 主题支持 */
         .theme2 { background-color: #0d1117; color: #c9d1d9; }
         .theme2 .probe-vps-card, .theme2 .probe-global-stats, .theme2 .probe-header-card, .theme2 .probe-chart-card { background: #161b22; color: #c9d1d9; box-shadow: 0 4px 6px rgba(0,0,0,0.4); border: 1px solid #30363d; }
         .theme2 .probe-vps-card:hover { border-color: #8b949e; }
@@ -897,12 +903,22 @@
                 const generateSubLink = (ip='') => { const tokenToUse = mySubToken.value || authKey.value; return `${currentDomain}/api/sub?user=${currentUser.value}&token=${tokenToUse}${ip?`&ip=${ip}`:''}`; };
                 const copyCommand = (txt, msg) => navigator.clipboard.writeText(txt).then(() => alert(msg));
 
-                // 🌟 显示二维码方法
-                const showQrCode = async (text) => {
+                // 🌟 显示二维码方法 (重构为同步生成，解决 Promise 失败与超长文本报错)
+                const showQrCode = (text) => {
                     try {
-                        qrCodeImage.value = await QRCode.toDataURL(text, { width: 300, margin: 2, color: { dark: '#1e293b', light: '#ffffff' } });
+                        const qr = new QRious({
+                            value: text,
+                            size: 300,
+                            level: 'L', // 容错率调低，允许承载更长的订阅链接
+                            background: '#ffffff',
+                            foreground: '#1e293b'
+                        });
+                        qrCodeImage.value = qr.toDataURL();
                         qrModalOpen.value = true;
-                    } catch (err) { alert('生成二维码失败！'); }
+                    } catch (err) { 
+                        console.error(err);
+                        alert('生成二维码失败！请检查链接长度或浏览器控制台。'); 
+                    }
                 };
 
                 // --- 探针后台管理交互 ---
