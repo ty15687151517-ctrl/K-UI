@@ -35,6 +35,9 @@ prev_cpu_total = prev_cpu_idle = 0
 prev_rx = prev_tx = 0
 loop_counter = 0
 
+# 🌟 动态心跳间隔，默认 5 秒
+global_interval = 5
+
 # --- 缓存静态信息 ---
 cached_os = cached_arch = cached_cpu_info = cached_virt = None
 
@@ -118,7 +121,7 @@ def get_port_traffic(port, protocol="tcp"):
         return in_bytes + out_bytes
     except Exception: return 0
 
-def get_system_status():
+def get_system_status(current_interval):
     global prev_cpu_total, prev_cpu_idle, prev_rx, prev_tx, loop_counter
     stats = {"cpu": 0, "mem": 0, "disk": 0, "uptime": "Unknown", "load": "0.00", "net_in_speed": 0, "net_out_speed": 0}
     
@@ -171,8 +174,9 @@ def get_system_status():
 
     rx_now, tx_now = get_net_dev_bytes()
     stats["net_rx"] = str(rx_now); stats["net_tx"] = str(tx_now)
-    if prev_rx > 0: stats["net_in_speed"] = (rx_now - prev_rx) // 15
-    if prev_tx > 0: stats["net_out_speed"] = (tx_now - prev_tx) // 15
+    # 🌟 动态除数计算实时网速
+    if prev_rx > 0: stats["net_in_speed"] = (rx_now - prev_rx) // current_interval
+    if prev_tx > 0: stats["net_out_speed"] = (tx_now - prev_tx) // current_interval
     prev_rx, prev_tx = rx_now, tx_now
 
     stats["ping_ct"] = stats["ping_cu"] = stats["ping_cm"] = stats["ping_bd"] = "0"
@@ -286,8 +290,8 @@ def build_singbox_config(nodes):
         else: os.system("systemctl restart sing-box >/dev/null 2>&1")
 
 def report_status(current_nodes, argo_urls):
-    global last_reported_bytes
-    status = get_system_status()  # 抓取包含探针数据的全量状态
+    global last_reported_bytes, global_interval
+    status = get_system_status(global_interval)
     status["ip"] = VPS_IP
     status["argo_urls"] = argo_urls
     
@@ -305,9 +309,13 @@ def report_status(current_nodes, argo_urls):
     last_reported_bytes = {k: v for k, v in last_reported_bytes.items() if k in current_ids}
     status["node_traffic"] = deltas
 
+    # 🌟 发送报告并动态接收后端下发的最新同步间隔
     try: 
         req = urllib.request.Request(REPORT_URL, data=json.dumps(status).encode(), headers=HEADERS)
-        urllib.request.urlopen(req, timeout=5)
+        res = urllib.request.urlopen(req, timeout=5)
+        resp_data = json.loads(res.read().decode('utf-8'))
+        if resp_data and "interval" in resp_data:
+            global_interval = max(1, int(resp_data["interval"]))
     except Exception as e: pass
 
 def fetch_and_apply_configs():
@@ -329,4 +337,5 @@ if __name__ == "__main__":
         if fetched_nodes is not None: current_active_nodes = fetched_nodes
         argo_urls = process_argo_nodes(current_active_nodes)
         report_status(current_active_nodes, argo_urls)
-        time.sleep(15)
+        # 🌟 动态休眠，完美应用面版设置的时间
+        time.sleep(global_interval)
